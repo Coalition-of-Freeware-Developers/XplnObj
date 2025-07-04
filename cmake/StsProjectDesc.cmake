@@ -82,18 +82,17 @@ set(ProjectGroupId "steptosky")
 set(ProjectId ${ProjectName})
 
 #----------------------------------------------------------------------------------#
-# Version / Dependency's system
+# Version / Dependency's system (Updated for 2025)
 
 # Set it to ON if you are in unstable branch otherwise set it to OFF
 set(ProjectVersionSnapshot OFF)
-set(ProjectVersionMajor 0)
-set(ProjectVersionMinor 9)
+set(ProjectVersionMajor 1)
+set(ProjectVersionMinor 0)
 set(ProjectVersionPatch 0)
 set(ProjectVersion "${ProjectVersionMajor}.${ProjectVersionMinor}.${ProjectVersionPatch}")
 
-# You can use any string you wish, 
-# but i will be changed to snapshot if it is enabled. 
-set(ProjectReleaseType "beta")
+# Release type
+set(ProjectReleaseType "stable")
 if (ProjectVersionSnapshot)
     set(ProjectReleaseType "snapshot")
 endif()

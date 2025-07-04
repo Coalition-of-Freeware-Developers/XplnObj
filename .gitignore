@@ -1,17 +1,46 @@
+# Modern CMake build artifacts (2025)
 *.orig
+
+# Build directories
+build/
+install/
+out/
+
+# Generated files
+include/xpln/Info.h
+include/xpln/Export.h
+vcs_data
+
+# IDE specific files
+.vscode/
+.vs/
+*.user
+*.vcxproj.user
+
+# Documentation
+doc-generated/
+reports/
+
+# Output directories  
+output/
+
+# Legacy build scripts and directories
 msvc/
 msvc-2017/
 msvc.bat
 msvc-2017.bat
-set-conan-user.bat
-include/xpln/Info.h
-include/xpln/Export.h
-output/
-test_package/build/
-reports/
-build/
-doc-generated
-vcs_data
 test.bat
 doc.bat
+
+# Package manager artifacts (legacy)
+test_package/build/
 bintray-upload.bat
+
+# CMake specific
+CMakeUserPresets.json
+.cmake/
+
+# Compiler artifacts
+*.pdb
+*.obj
+*.o

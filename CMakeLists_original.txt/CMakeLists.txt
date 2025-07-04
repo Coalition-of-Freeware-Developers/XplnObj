@@ -33,149 +33,92 @@
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Modern CMake Configuration (Updated 2025)
+# init
 
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required (VERSION 3.7.0)
 
-# Set policies for modern CMake
-if(POLICY CMP0135)
-    cmake_policy(SET CMP0135 NEW) # FetchContent timestamp handling
-endif()
-if(POLICY CMP0144)
-    cmake_policy(SET CMP0144 NEW) # find_package improvements
-endif()
-if(POLICY CMP0148)
-    cmake_policy(SET CMP0148 NEW) # find_package variable improvements  
-endif()
-
+message(STATUS "==============================================")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Project Definition
+# Solution
 
 include(StsProjectDesc)
-project(${ProjectId} 
-    VERSION ${ProjectVersion}
-    DESCRIPTION "${ProjectDescription}"
-    HOMEPAGE_URL "${ProjectWebLink}"
-    LANGUAGES CXX
-)
+project(${ProjectId} LANGUAGES "CXX")
 
-# Modern CMake features
-include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
+#----------------------------------------------------------------------------------#
+# Info file
 
-# Set C++ standard - Updated to C++17 for 2025
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Enable IPO/LTO if supported
-include(CheckIPOSupported)
-check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)
-if(IPO_SUPPORTED)
-    message(STATUS "IPO/LTO is supported and will be enabled for Release builds")
-endif()
-
-# Generate Info header
 include(StsInfoFilesGenerator)
-genInfoFile(StsProjectDesc "${CMAKE_CURRENT_SOURCE_DIR}/include/xpln/Info.h")
+genInfoFile(StsProjectDesc "${CMAKE_SOURCE_DIR}/include/xpln/Info.h")
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Options - Modernized for 2025
+# options 
 
-option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-option(BUILD_TESTING "Build tests" OFF)
-option(XPLNOBJ_INSTALL "Generate install target" ON)
-option(XPLNOBJ_ENABLE_IPO "Enable IPO/LTO for Release builds" ON)
-
-# Set default build type if not specified
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+if (NOT TESTING_REPORT_DIR)
+    set(TESTING_REPORT_DIR "${CMAKE_SOURCE_DIR}/reports/tests")
 endif()
 
-# Modern testing report directory
-if(NOT TESTING_REPORT_DIR)
-    set(TESTING_REPORT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-reports")
+if (NOT BUILD_SHARED_LIBS)
+    set (BUILD_SHARED_LIBS OFF)
+endif()
+
+if (NOT BUILD_TESTING)
+    set (BUILD_TESTING OFF)
 endif()
 
 message(STATUS "==============================================")
-message(STATUS "XplnObj Configuration (Modernized 2025):")
-message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Build testing: ${BUILD_TESTING}")
-message(STATUS "  Shared libraries: ${BUILD_SHARED_LIBS}")
-message(STATUS "  Install target: ${XPLNOBJ_INSTALL}")
-message(STATUS "  IPO/LTO enabled: ${XPLNOBJ_ENABLE_IPO}")
-message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "  Installation prefix: ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "  Testing report dir: ${TESTING_REPORT_DIR}")
+if (NOT CMAKE_BUILD_TYPE)
+    message(STATUS "Build type = multi configuration or undefined")
+else()
+    message(STATUS "Build type = ${CMAKE_BUILD_TYPE}")
+endif()
+message(STATUS "Build testing = ${BUILD_TESTING}")
+message(STATUS "Shared lib = ${BUILD_SHARED_LIBS}")
+message(STATUS "Testing report dir = ${TESTING_REPORT_DIR}")
+message(STATUS "Installation prefix = ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "==============================================")
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Dependencies - No external dependencies for core library
+# conan.io this must be after options.
 
-# This library is self-contained and doesn't require external dependencies
-# Testing dependencies are handled via FetchContent in src-test/CMakeLists.txt
+include(StsConan)
+conan_cmake_run(CONANFILE conanfile.py
+                BASIC_SETUP CMAKE_TARGETS KEEP_RPATHS
+                BUILD missing)
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Subdirectories
+# sub projects
 
 add_subdirectory(src)
-
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(src-test)
 endif()
 
-# Add example if available
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/example/CMakeLists.txt")
-    option(XPLNOBJ_BUILD_EXAMPLES "Build examples" OFF)
-    if(XPLNOBJ_BUILD_EXAMPLES)
-        add_subdirectory(example)
-    endif()
-endif()
-
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# Package Configuration
+# make package config version
 
-if(XPLNOBJ_INSTALL)
-    # Create package config files
-    set(CONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
-    set(PROJECT_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake")
-    set(VERSION_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake")
+include(CMakePackageConfigHelpers)
+set(LIB_CONFIG_VER "${CMAKE_CURRENT_BINARY_DIR}/${ProjectId}ConfigVersion.cmake")
+# COMPATIBILITY (AnyNewerVersion|SameMajorVersion|ExactVersion)
+write_basic_package_version_file(
+    ${LIB_CONFIG_VER}
+    VERSION ${ProjectVersion}
+    COMPATIBILITY SameMajorVersion
+)
 
-    # Create package version file
-    write_basic_package_version_file(
-        "${VERSION_CONFIG_FILE}"
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion
-    )
-
-    # Create package config file
-    configure_package_config_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/XplnObjConfig.cmake.in"
-        "${PROJECT_CONFIG_FILE}"
-        INSTALL_DESTINATION "${CONFIG_INSTALL_DIR}"
-    )
-
-    # Install package config files
-    install(
-        FILES "${PROJECT_CONFIG_FILE}" "${VERSION_CONFIG_FILE}"
-        DESTINATION "${CONFIG_INSTALL_DIR}"
-    )
-endif()
+install(FILES ${LIB_CONFIG_VER} DESTINATION cmake)
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#

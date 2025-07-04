@@ -33,95 +33,115 @@
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# project
+# Modern XplnObj Library Target
 
-cmake_minimum_required (VERSION 3.7.0)
-
-set(TARGET ${ProjectId})
-project(${TARGET} VERSION ${ProjectVersion} LANGUAGES "CXX")
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# project files
-
-file(GLOB_RECURSE CM_FILES 
-    "*.h" "*.inl" "*.cpp" 
-    "${CMAKE_SOURCE_DIR}/include/*.h" 
-    "${CMAKE_SOURCE_DIR}/include/*.inl" 
-    "${CMAKE_SOURCE_DIR}/include/*.cpp"
+# Collect source files
+file(GLOB_RECURSE XPLNOBJ_SOURCES 
+    CONFIGURE_DEPENDS
+    "*.cpp"
+    "*.h"
 )
 
+file(GLOB_RECURSE XPLNOBJ_HEADERS 
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include/*.inl"
+)
+
+# Create the library target
+add_library(${ProjectId} ${XPLNOBJ_SOURCES} ${XPLNOBJ_HEADERS})
+add_library(steptosky::XplnObj ALIAS ${ProjectId})
+
+# Set target properties
+set_target_properties(${ProjectId} PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${ProjectVersionMajor}
+    OUTPUT_NAME "XplnObj"
+)
+
+# Configure include directories
+target_include_directories(${ProjectId}
+    PRIVATE 
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+    PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+)
+
+# Require C++17 for consumers
+target_compile_features(${ProjectId} PUBLIC cxx_std_17)
+
+# Group files for IDE organization
 include(StsGroupFiles)
-groupFiles("${CM_FILES}")
+groupFiles("${XPLNOBJ_SOURCES};${XPLNOBJ_HEADERS}")
+
+#----------------------------------------------------------------------------------#
+# Compiler Configuration
+
+# Precompiled headers for MSVC
+if(MSVC)
+    set_source_files_properties(stdafx.cpp
+        PROPERTIES COMPILE_FLAGS "/Yc"
+    )
+    
+    target_precompile_headers(${ProjectId} PRIVATE stdafx.h)
+endif()
+
+# Compiler-specific options
+target_compile_options(${ProjectId} PRIVATE
+    # MSVC specific options
+    $<$<CXX_COMPILER_ID:MSVC>:
+        /W4         # Warning level 4
+        /WX         # Treat warnings as errors
+        /MP         # Multi-processor compilation
+        /permissive- # Strict conformance
+        /Zc:__cplusplus # Correct __cplusplus macro
+        /D_CRT_SECURE_NO_WARNINGS
+    >
+    
+    # GCC/Clang options
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
+        -Wall
+        -Wextra
+        -Werror
+        -pedantic
+        -Wno-unknown-pragmas
+    >
+)
+
+# Define macros for export/import
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(${ProjectId} 
+        PRIVATE XPLN_OBJ_EXPORTS
+        INTERFACE XPLN_OBJ_SHARED
+    )
+else()
+    target_compile_definitions(${ProjectId} 
+        PUBLIC XPLN_OBJ_STATIC_COMPILATION
+    )
+endif()
+
+# Enable IPO/LTO for Release builds if supported and requested
+if(IPO_SUPPORTED AND XPLNOBJ_ENABLE_IPO AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_target_properties(${ProjectId} PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION TRUE
+    )
+    message(STATUS "IPO/LTO enabled for ${ProjectId}")
+endif()
 
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# targets
-
-add_library(${TARGET} ${CM_FILES})
-
-#----------------------------------------------------------------------------------#
-# cxx standard 
-
-set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED YES)
-target_compile_features(${TARGET} PUBLIC cxx_std_14)
-
-#----------------------------------------------------------------------------------#
-# linkage 
-
-target_include_directories(${TARGET} 
-    PRIVATE "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>"
-    PRIVATE "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>"
-    PUBLIC  "$<INSTALL_INTERFACE:include>"
-)
-
-#----------------------------------------------------------------------------------#
-# compile options
-
-# pre-compile headers
-set_source_files_properties(stdafx.cpp
-    PROPERTIES COMPILE_FLAGS $<$<CXX_COMPILER_ID:MSVC>:/Yc>
-)
-
-target_compile_options(${TARGET} 
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Yustdafx.h>  # pre-compile headers
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/FIstdafx.h>  # pre-compile headers
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>          # multi-processor compilation
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:-D_CRT_SECURE_NO_WARNINGS>
-
-    PRIVATE $<$<CXX_COMPILER_ID:AppleClang>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:AppleClang>:-pedantic -Werror>
-
-    PRIVATE $<$<CXX_COMPILER_ID:Clang>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:Clang>:-pedantic -Werror>
-
-    PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:GNU>:-pedantic -Werror>
-)
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# installation
-
-install(DIRECTORY "${CMAKE_SOURCE_DIR}/include/" DESTINATION "include")
-install(TARGETS ${TARGET} EXPORT ${TARGET} DESTINATION "$<CONFIG>")
-install(EXPORT ${TARGET} NAMESPACE "${ProjectGroupId}::" 
-    DESTINATION "cmake" FILE "${TARGET}Config.cmake"
-)
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# export header file
+# Export Header Generation
 
 include(GenerateExportHeader)
-generate_export_header(${TARGET} 
-    EXPORT_MACRO_NAME "XpObjLib" 
-    EXPORT_FILE_NAME ${CMAKE_SOURCE_DIR}/include/xpln/Export.h
+generate_export_header(${ProjectId} 
+    EXPORT_MACRO_NAME "XpObjLib"
+    EXPORT_FILE_NAME "${CMAKE_CURRENT_SOURCE_DIR}/../include/xpln/Export.h"
     DEPRECATED_MACRO_NAME "XpObjLibDeprecated"
     STATIC_DEFINE "XPLN_OBJ_STATIC_COMPILATION"
 )
@@ -129,3 +149,31 @@ generate_export_header(${TARGET}
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
+# Installation
+
+if(XPLNOBJ_INSTALL)
+    # Install headers
+    install(
+        DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl"
+    )
+
+    # Install library
+    install(
+        TARGETS ${ProjectId}
+        EXPORT XplnObjTargets
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+    )
+
+    # Install export targets
+    install(
+        EXPORT XplnObjTargets
+        FILE XplnObjTargets.cmake
+        NAMESPACE steptosky::
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+    )
+endif()

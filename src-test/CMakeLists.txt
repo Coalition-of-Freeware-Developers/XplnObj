@@ -33,95 +33,117 @@
 #----------------------------------------------------------------------------------#
 #//////////////////////////////////////////////////////////////////////////////////#
 #----------------------------------------------------------------------------------#
-# project
+# Modern Test Configuration
 
-cmake_minimum_required (VERSION 3.7.0)
-
-set(TARGET test-${ProjectId})
-project(${TARGET} VERSION ${ProjectVersion} LANGUAGES "CXX")
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# project files
-
-file(GLOB_RECURSE CM_FILES 
-    "*.h" "*.inl" "*.cpp"
+# Collect test source files
+file(GLOB_RECURSE TEST_SOURCES 
+    CONFIGURE_DEPENDS
+    "*.cpp"
+    "*.h"
 )
+
+#----------------------------------------------------------------------------------#
+# Google Test Integration
+
+include(FetchContent)
+
+# Fetch Google Test
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.14.0
+    GIT_SHALLOW    TRUE
+)
+
+# Configure Google Test
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(BUILD_GMOCK ON CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(googletest)
+
+#----------------------------------------------------------------------------------#
+# Test Target
+
+set(TEST_TARGET test-${ProjectId})
+
+add_executable(${TEST_TARGET} ${TEST_SOURCES})
+
+# Set C++ standard
+set_target_properties(${TEST_TARGET} PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
+
+# Include directories
+target_include_directories(${TEST_TARGET} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+# Link libraries
+target_link_libraries(${TEST_TARGET} PRIVATE
+    ${ProjectId}
+    gtest
+    gtest_main
+    gmock
+    gmock_main
+)
+
+# Compile definitions
+target_compile_definitions(${TEST_TARGET} PRIVATE TESTING)
+
+# Group files for IDE
 include(StsGroupFiles)
-groupFiles("${CM_FILES}")
+groupFiles("${TEST_SOURCES}")
 
 #----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# targets 
+# Compiler Configuration
 
-add_executable(${TARGET} ${CM_FILES})
-add_dependencies(${TARGET} ${ProjectId})
-add_definitions(-DTESTING)
+# Precompiled headers for MSVC (if test PCH exists)
+if(MSVC AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ph/stdafx.cpp")
+    set_source_files_properties(ph/stdafx.cpp
+        PROPERTIES COMPILE_FLAGS "/Yc"
+    )
+    target_precompile_headers(${TEST_TARGET} PRIVATE ph/stdafx.h)
+endif()
 
-#----------------------------------------------------------------------------------#
-# linkage 
-
-target_include_directories(${TARGET} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-target_include_directories(${TARGET} PRIVATE "${CMAKE_SOURCE_DIR}/src")
-target_include_directories(${TARGET} PRIVATE "${CMAKE_SOURCE_DIR}/src-test")
-
-target_link_libraries(${TARGET} ${ProjectId})
-target_link_libraries(${TARGET} CONAN_PKG::gtest)
-
-#----------------------------------------------------------------------------------#
-# compile options
-
-# pre-compile headers
-set_source_files_properties(ph/stdafx.cpp
-    PROPERTIES COMPILE_FLAGS $<$<CXX_COMPILER_ID:MSVC>:/Yc>
-)
-
-target_compile_options(${TARGET}
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Yuph/stdafx.h>   # pre-compile headers
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/FIph/stdafx.h>   # pre-compile headers
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>              # multi-processor compilation
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-    PRIVATE $<$<CXX_COMPILER_ID:MSVC>:-D_CRT_SECURE_NO_WARNINGS>
-
-    PRIVATE $<$<CXX_COMPILER_ID:AppleClang>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:AppleClang>:-pedantic -Werror>
-
-    PRIVATE $<$<CXX_COMPILER_ID:Clang>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:Clang>:-pedantic -Werror>
-
-    PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-unknown-pragmas>
-    PRIVATE $<$<CXX_COMPILER_ID:GNU>:-pedantic -Werror>
+# Compiler-specific options
+target_compile_options(${TEST_TARGET} PRIVATE
+    # MSVC specific options
+    $<$<CXX_COMPILER_ID:MSVC>:
+        /W4         # Warning level 4
+        /WX         # Treat warnings as errors  
+        /MP         # Multi-processor compilation
+        /permissive- # Strict conformance
+        /D_CRT_SECURE_NO_WARNINGS
+    >
+    
+    # GCC/Clang options
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>>:
+        -Wall
+        -Wextra
+        -Werror
+        -pedantic
+        -Wno-unknown-pragmas
+    >
 )
 
 #----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# copying the dynamic library
+# Test Registration
 
-add_custom_command(TARGET ${TARGET} 
-    POST_BUILD COMMAND 
-    ${CMAKE_COMMAND} -E copy_if_different 
-    "$<TARGET_FILE:${ProjectId}>" "$<TARGET_FILE_DIR:${TARGET}>"
+include(GoogleTest)
+gtest_discover_tests(${TEST_TARGET}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-set_target_properties(${TARGET}
-    PROPERTIES
-    INSTALL_RPATH $<$<PLATFORM_ID:Darwin>:"@executable_path">
-    INSTALL_RPATH $<$<PLATFORM_ID:Linux>:"$ORIGIN">
+# Add a custom target to run tests
+add_custom_target(run_tests
+    COMMAND ${TEST_TARGET}
+    DEPENDS ${TEST_TARGET}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Running unit tests"
 )
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#
-# testing
-
-add_test(NAME ${TARGET} 
-    COMMAND $<TARGET_FILE:${TARGET}>  
-    "--gtest_output=xml:${TESTING_REPORT_DIR}/${TARGET}-$<CONFIG>.xml"
-)
-
-#----------------------------------------------------------------------------------#
-#//////////////////////////////////////////////////////////////////////////////////#
-#----------------------------------------------------------------------------------#

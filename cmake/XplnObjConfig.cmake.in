@@ -1,0 +1,30 @@
+#----------------------------------------------------------------------------------#
+#//////////////////////////////////////////////////////////////////////////////////#
+#----------------------------------------------------------------------------------#
+#
+# XplnObj CMake Configuration File
+#
+# This file sets up the XplnObj library for use in other CMake projects.
+# After installation, other projects can find this library using:
+#   find_package(XplnObj REQUIRED)
+#   target_link_libraries(my_target steptosky::XplnObj)
+#
+#----------------------------------------------------------------------------------#
+#//////////////////////////////////////////////////////////////////////////////////#
+#----------------------------------------------------------------------------------#
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Check for required compiler features
+if(NOT TARGET steptosky::XplnObj)
+    include("${CMAKE_CURRENT_LIST_DIR}/XplnObjTargets.cmake")
+endif()
+
+# Verify that the required C++ standard is supported
+if(CMAKE_VERSION VERSION_LESS "3.21")
+    message(WARNING "CMake 3.21 or higher is recommended for optimal XplnObj support")
+endif()
+
+check_required_components(XplnObj)
